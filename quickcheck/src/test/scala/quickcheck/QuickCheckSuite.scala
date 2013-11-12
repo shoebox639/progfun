@@ -20,7 +20,8 @@ class QuickCheckSuite extends FunSuite with Checkers {
     var ok = false
     try {
       check(p)
-    } catch {
+    } 
+    catch {
       case e: TestFailedException =>
         ok = true
     }
