@@ -1,14 +1,12 @@
 package nodescala
 
-
-
 import scala.language.postfixOps
-import scala.util.{Try, Success, Failure}
+import scala.util.{ Try, Success, Failure }
 import scala.collection._
 import scala.concurrent._
 import ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.async.Async.{async, await}
+import scala.async.Async.{ async, await }
 import org.scalatest._
 import NodeScala._
 import org.junit.runner.RunWith
@@ -32,6 +30,45 @@ class NodeScalaSuite extends FunSuite {
     } catch {
       case t: TimeoutException => // ok!
     }
+  }
+
+  test("Empty List returns Future of empty last") {
+    val list = List[Future[Int]]()
+
+    assert(Await.result(Future.all(list), 1 second) == Nil)
+  }
+
+  test("One item returns Future of it") {
+    val list = List[Future[Int]](Future { 1 })
+
+    assert(Await.result(Future.all(list), 1 second) == List(1))
+  }
+
+  test("Two item returns Future of both") {
+    val list = List[Future[Int]](Future { 1 }, Future { 2 })
+
+    assert(Await.result(Future.all(list), 1 second) == List(1, 2))
+  }
+
+  test("One Exception and one item returns Future of both") {
+    val list = List[Future[Int]](Future { 1 }, Future { throw new Error })
+
+    try {
+      Await.result(Future.all(list), 0 nanos)
+      assert(false)
+    } catch {
+      case t: Any => assert(true)
+    }
+  }
+
+  test("Any with one item returns success/failure of that item") {
+    lazy val b1 = blocking {
+      Thread.sleep(1000)
+      1
+    }
+    val list = List[Future[Int]](Future(b1), Future(2))
+
+    assert(Await.result(Future.any(list), 0 nanos) == 2)
   }
 
   test("CancellationTokenSource should allow stopping the computation") {
