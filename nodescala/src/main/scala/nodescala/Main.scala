@@ -13,7 +13,9 @@ object Main {
     // 1. instantiate the server at 8191, relative path "/test",
     //    and have the response return headers of the request
     val myServer = new NodeScala.Default(8191)
-    val myServerSubscription = ???
+    val myServerSubscription = myServer.start("/test") {
+      req => req.map(kv => kv._1 + kv._2).iterator
+    }
 
     // TO IMPLEMENT
     // 2. create a future that expects some user input `x`
