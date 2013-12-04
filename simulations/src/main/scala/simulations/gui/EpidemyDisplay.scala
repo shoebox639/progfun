@@ -159,6 +159,7 @@ object EpidemyDisplay extends EpidemySimulator with App {
       var countTime = 0
       def actionPerformed(event: ActionEvent) {
         if (currentTime <= countTime) {
+          println("***Propogation***")
           assert(hasStep)
           for (w <- world) w.reset
           updateWorld()
