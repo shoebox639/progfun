@@ -20,22 +20,22 @@ object Main {
     // TO IMPLEMENT
     // 2. create a future that expects some user input `x`
     //    and continues with a `"You entered... " + x` message
-    val userInterrupted: Future[String] = ???
+    val userInterrupted: Future[String] = Future{""}
 
     // TO IMPLEMENT
     // 3. create a future that completes after 20 seconds
     //    and continues with a `"Server timeout!"` message
-    val timeOut: Future[String] = ???
+    val timeOut: Future[String] = Future{""}
 
     // TO IMPLEMENT
     // 4. create a future that completes when either 10 seconds elapse
     //    or the user enters some text and presses ENTER
-    val terminationRequested: Future[String] = ???
+    val terminationRequested: Future[String] = Future{""}
 
     // TO IMPLEMENT
     // 5. unsubscribe from the server
     terminationRequested onSuccess {
-      case msg => ???
+      case msg => myServerSubscription.unsubscribe
     }
   }
 
