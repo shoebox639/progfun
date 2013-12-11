@@ -109,6 +109,7 @@ object Search {
 
   def wikipediaPageRetrofit(term: String): Future[String] = {
     async {
+      println(s"searching for $term")
       val (cb, f) = callbackFuture[Page]
       service.page(term, cb)
       val result = await { f }
