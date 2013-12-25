@@ -48,7 +48,10 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
 
   override def preStart(): Unit = {
     arbiter ! Join
+    context.actorOf(persistenceProps, "persister")
   }
+
+  def persister = context.child("persister").get
 
   def receive = {
     case JoinedPrimary => context.become(leader)
@@ -57,6 +60,16 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
 
   def get(key: String, id: Long) = {
     sender ! GetResult(key, kv.get(key), id)
+  }
+
+  def persist(key: String, value: Option[String], seq: Long): Unit = {
+    val event = Persist(key, value, seq)
+    
+    persister ! event
+
+    context.system.scheduler.scheduleOnce(100 millis) {
+      if (persistenceAcks.contains(seq)) persist(key, value, seq)
+    }
   }
 
   /* TODO Behavior for  the leader role. */
@@ -73,7 +86,9 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     case _ =>
   }
 
-  var currSeq:Long = 0
+  var currSeq: Long = 0
+
+  var persistenceAcks = Map.empty[Long, ActorRef]
 
   /* TODO Behavior for the replica role. */
   val replica: Receive = {
@@ -84,12 +99,19 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
           case Some(value) => kv += (key -> value)
           case None => kv -= key
         }
-        sender ! SnapshotAck(key, seq)
+        persistenceAcks += (seq -> sender)
+        
+        persist(key, value, seq)
+        
         currSeq += 1
       }
       else if (seq < currSeq) {
         sender ! SnapshotAck(key, seq)
       }
+    }
+    case Persisted(key, seq) => {
+      persistenceAcks(seq) ! SnapshotAck(key, seq)
+      persistenceAcks -= seq
     }
   }
 
