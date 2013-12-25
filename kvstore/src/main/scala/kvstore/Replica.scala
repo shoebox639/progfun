@@ -45,6 +45,10 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   var secondaries = Map.empty[ActorRef, ActorRef]
   // the current set of replicators
   var replicators = Set.empty[ActorRef]
+  
+  override def preStart(): Unit = {
+    arbiter ! Join
+  }
 
   def receive = {
     case JoinedPrimary   => context.become(leader)
@@ -53,6 +57,15 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
 
   /* TODO Behavior for  the leader role. */
   val leader: Receive = {
+    case Get(key, id) => sender ! GetResult(key, kv.get(key), id)
+    case Insert(key, value, id) => {
+      kv += (key -> value)
+      sender ! OperationAck(id)
+    }
+    case Remove(key, id) => {
+      kv -= key
+      sender ! OperationAck(id)
+    }
     case _ =>
   }
 
