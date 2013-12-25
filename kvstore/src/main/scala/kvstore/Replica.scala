@@ -62,13 +62,14 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     sender ! GetResult(key, kv.get(key), id)
   }
 
-  def persist(key: String, value: Option[String], seq: Long): Unit = {
+  def persist(key: String, value: Option[String], seq: Long, sender: ActorRef): Unit = {
     val event = Persist(key, value, seq)
-    
+    persistenceAcks += (seq -> sender)
+
     persister ! event
 
     context.system.scheduler.scheduleOnce(100 millis) {
-      if (persistenceAcks.contains(seq)) persist(key, value, seq)
+      if (persistenceAcks.contains(seq)) persist(key, value, seq, sender)
     }
   }
 
@@ -77,13 +78,30 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     case Get(key, id) => get(key, id)
     case Insert(key, value, id) => {
       kv += (key -> value)
-      sender ! OperationAck(id)
+      persist(key, Some(value), id, sender)
+
+      context.system.scheduler.scheduleOnce(1 second) {
+        if (persistenceAcks.contains(id)) {
+          persistenceAcks(id) ! OperationFailed(id) 
+          persistenceAcks -= id
+        }
+      }
     }
     case Remove(key, id) => {
       kv -= key
-      sender ! OperationAck(id)
+      persist(key, None, id, sender)
+
+      context.system.scheduler.scheduleOnce(1 second) {
+        if (persistenceAcks.contains(id)) {
+          persistenceAcks(id) ! OperationFailed(id) 
+          persistenceAcks -= id
+        }
+      }
     }
-    case _ =>
+    case Persisted(key, id) => {
+      persistenceAcks(id) ! OperationAck(id)
+      persistenceAcks -= id
+    }
   }
 
   var currSeq: Long = 0
@@ -99,13 +117,10 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
           case Some(value) => kv += (key -> value)
           case None => kv -= key
         }
-        persistenceAcks += (seq -> sender)
-        
-        persist(key, value, seq)
-        
+        persist(key, value, seq, sender)
+
         currSeq += 1
-      }
-      else if (seq < currSeq) {
+      } else if (seq < currSeq) {
         sender ! SnapshotAck(key, seq)
       }
     }
