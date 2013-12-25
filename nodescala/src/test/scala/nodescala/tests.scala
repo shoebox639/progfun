@@ -1,16 +1,19 @@
 package nodescala
 
-import scala.language.postfixOps
-import scala.util.{ Try, Success, Failure }
+import scala.async.Async.async
+import scala.async.Async.await
 import scala.collection._
 import scala.concurrent._
-import ExecutionContext.Implicits.global
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.async.Async.{ async, await }
-import org.scalatest._
-import NodeScala._
+import scala.language.postfixOps
 import org.junit.runner.RunWith
+import org.scalatest._
 import org.scalatest.junit.JUnitRunner
+import NodeScala._
+import scala.util.Failure
+import scala.util.Success
+import scala.util.Try
 
 @RunWith(classOf[JUnitRunner])
 class NodeScalaSuite extends FunSuite {
@@ -68,7 +71,129 @@ class NodeScalaSuite extends FunSuite {
     }
     val list = List[Future[Int]](Future(b1), Future(2))
 
-    assert(Await.result(Future.any(list), 0 nanos) == 2)
+    assert(Await.result(Future.any(list), 1 nanos) == 2)
+  }
+
+  test("Any with one item throwing exception first, returns exception") {
+    lazy val b1 = blocking {
+      Thread.sleep(1000)
+      1
+    }
+    val list = List[Future[Int]](Future(b1), Future(throw new NoSuchElementException))
+
+    try {
+      Await.result(Future.any(list), 1 nanos)
+      fail
+    } catch {
+      case t: NoSuchElementException => //ok
+    }
+  }
+
+  test("Delay should throw if not finished") {
+    try {
+      Await.result(Future.delay(1 second), 1 nanos)
+      fail
+    }
+    catch {
+      case t: TimeoutException => //ok
+    }
+  }
+
+  test("Now fails when not waiting long enough") {
+    lazy val b1 = blocking {
+      Thread.sleep(1000)
+      1
+    }
+
+    try {
+      Future(b1).now
+      fail
+    } catch {
+      case t: NoSuchElementException => //ok
+    }
+  }
+
+  test("Now succeeds when waiting long enough") {
+    try {
+      Future(1).now
+      fail
+    } catch {
+      case t: NoSuchElementException => //ok
+    }
+  }
+
+  test("ContinueWith doesn't act on unfinished futures") {
+    lazy val b1 = blocking {
+      Thread.sleep(1000)
+      1
+    }
+
+    val future = Future[Int](b1) continueWith { _ => 3 }
+
+    try {
+      Await.result(future, 1 nanos)
+    } catch {
+      case e: TimeoutException => // ok
+    }
+  }
+
+  test("ContinueWith maps failure correctly") {
+    val future = Future[Int](throw new NoSuchElementException) continueWith {
+      _.value match {
+        case Some(Success(x)) => "success"
+        case Some(Failure(t)) => "failure"
+        case None => "not finished"
+      }
+    }
+
+    assert(Await.result(future, 1 nanos) == "failure")
+  }
+
+  test("ContinueWith maps success correctly") {
+    val future = Future[Int](1) continueWith {
+      _.value match {
+        case Some(Success(x)) => "success"
+        case Some(Failure(t)) => "failure"
+        case None => "not finished"
+      }
+    }
+
+    assert(Await.result(future, 1 nanos) == "success")
+  }
+
+  test("Continue doesn't act when not complete") {
+    lazy val b1 = blocking {
+      Thread.sleep(1000)
+      1
+    }
+    val future = Future(b1) continue {
+      case Success(x) => "success"
+      case Failure(t) => "failure"
+    }
+
+    try {
+      Await.result(future, 1 nanos)
+    } catch {
+      case e: TimeoutException => // ok
+    }
+  }
+
+  test("Continue maps success correctly") {
+    val future = Future(1) continue {
+      case Success(x) => "success"
+      case Failure(t) => "failure"
+    }
+
+    assert(Await.result(future, 1 nanos) == "success")
+  }
+
+  test("Continue maps failures correctly") {
+    val future = Future(1 / 0) continue {
+      case Success(x) => "success"
+      case Failure(t) => "failure"
+    }
+
+    assert(Await.result(future, 1 nanos) == "failure")
   }
 
   test("CancellationTokenSource should allow stopping the computation") {
@@ -129,6 +254,20 @@ class NodeScalaSuite extends FunSuite {
       if (handler != null) handler(exchange)
       exchange
     }
+  }
+
+  test("cancellation test") {
+    //    val working = Future.run() { ct =>
+    //      Future {
+    //        while (ct.nonCancelled) {
+    //          println("working")
+    //        }
+    //        println("done")
+    //      }
+    //    }
+    //    Future.delay(1 seconds) onSuccess {
+    //      case _ => working.unsubscribe()
+    //    }
   }
 
   class DummyServer(val port: Int) extends NodeScala {

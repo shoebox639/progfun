@@ -7,7 +7,6 @@ import org.scalatest.junit.JUnitRunner
 
 @RunWith(classOf[JUnitRunner])
 class EpidemySuite extends FunSuite {
-
   test("prevalence rate"){
     val prevalenceRate = 0.01
 
